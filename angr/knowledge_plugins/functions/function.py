@@ -4,7 +4,7 @@ import logging
 import networkx
 import string
 import itertools
-from collections import defaultdict
+from collections import defaultdict, deque
 
 import claripy
 from ...errors import SimEngineError, SimMemoryError
@@ -321,17 +321,36 @@ class Function(object):
         # for reg in initial_state.arch.persistent_regs + ['ip']:
         #     fresh_state.registers.store(reg, initial_state.registers.load(reg))
 
-        # reanalyze function with a new initial state
-        fresh_state = self._project.factory.blank_state(mode="fastpath")
-        fresh_state.regs.ip = self.addr
+        # reanalyze function from all call sites where it gets called from
+        # this is useful for architectures like mips, where a function call might look like:
+        # lw $t9, <offset>($gp)
+        # jalr $t9
+        # Sometimes global constants are addressed relative to $t9 in mips, which is the address
+        # of the current function
+
+        q = deque()
+        analyzed = set()
+        # FIXME callgraph.in_edges returns function start addresses, NOT the addresses of the blocks
+        # for the callsites
+        # TODO perhaps this fix should go in string_references instead, not sure if angr would consider
+        # $t9 an "input" to the function or not. If it is, then $t9-relative addressing isn't a local
+        # runtime value
+        for caller, _ in self._project.kb.callgraph.in_edges(self.addr):
+            for callsite in self._project.kb.functions[caller].get_call_sites():
+                if self._project.kb.functions[caller].get_call_target(callsite) != self.addr:
+                    continue
+
+                state = self._project.factory.blank_state(mode="fastpath")
+                state.regs.ip = callsite
+                for succ in self._project.factory.successors(state):
+                    if succ.se.eval(succ.ip) == self.addr:
+                        q.append(succ)
+                        analyzed.add(self.addr)
 
         graph_addrs = set(x.addr for x in self.graph.nodes() if isinstance(x, BlockNode))
 
         # process the nodes in a breadth-first order keeping track of which nodes have already been analyzed
-        analyzed = set()
-        q = [fresh_state]
-        analyzed.add(fresh_state.se.eval(fresh_state.ip))
-        while len(q) > 0:
+        while q:
             state = q.pop()
             # make sure its in this function
             if state.se.eval(state.ip) not in graph_addrs:
@@ -360,7 +379,7 @@ class Function(object):
                     succ_ip = succ.se.eval(succ.ip)
                     if succ_ip in self and succ_ip not in analyzed:
                         analyzed.add(succ_ip)
-                        q.insert(0, succ)
+                        q.appendleft(succ)
 
             # force jumps to missing successors
             # (this is a slightly hacky way to force it to explore all the nodes in the function)
@@ -380,7 +399,7 @@ class Function(object):
                         succ = all_successors[0].copy()
                         succ.ip = succ_addr
                         analyzed.add(succ_addr)
-                        q.insert(0, succ)
+                        q.appendleft(succ)
                     else:
                         l.warning("Could not reach successor: %#x", succ_addr)
 
