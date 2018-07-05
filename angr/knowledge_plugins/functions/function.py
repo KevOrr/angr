@@ -324,6 +324,8 @@ class Function(object):
         # reanalyze function with a new initial state
         fresh_state = self._project.factory.blank_state(mode="fastpath")
         fresh_state.regs.ip = self.addr
+        if self._project.arch.name.startswith('MIPS'):
+            fresh_state.regs.t9 = self.addr
 
         graph_addrs = set(x.addr for x in self.graph.nodes() if isinstance(x, BlockNode))
 
@@ -333,17 +335,17 @@ class Function(object):
         analyzed.add(fresh_state.se.eval(fresh_state.ip))
         while len(q) > 0:
             state = q.pop()
+            curr_ip = state.se.eval(state.ip)
+
             # make sure its in this function
-            if state.se.eval(state.ip) not in graph_addrs:
+            if curr_ip not in graph_addrs:
                 continue
             # don't trace into simprocedures
-            if self._project.is_hooked(state.se.eval(state.ip)):
+            if self._project.is_hooked(curr_ip):
                 continue
             # don't trace outside of the binary
-            if not self._project.loader.main_object.contains_addr(state.se.eval(state.ip)):
+            if not self._project.loader.main_object.contains_addr(curr_ip):
                 continue
-
-            curr_ip = state.se.eval(state.ip)
 
             # get runtime values from logs of successors
             successors = self._project.factory.successors(state)
@@ -354,6 +356,32 @@ class Function(object):
                             constants.add(ao.ast)
                         elif not ao.ast.symbolic:
                             constants.add(succ.se.eval(ao.ast))
+
+                    # If this operation has constant result, collect it
+                    # see analyses/ddg.py:_process_operation()
+                    result = None
+                    if a.op.startswith('Iop_Not'):
+                        result = ~a.exprs[0].ast
+                    if a.op.startswith('Iop_Add'):
+                        result = a.exprs[0].ast + a.exprs[1].ast
+                    elif a.op.startswith('Iop_Sub'):
+                        result = a.exprs[0].ast - a.exprs[1].ast
+                    elif a.op.startswith('Iop_Mul'):
+                        result = a.exprs[0].ast * a.exprs[1].ast
+                    elif a.op.startswith('Iop_Xor'):
+                        result = a.exprs[0].ast ^ a.exprs[1].ast
+                    elif a.op.startswith('Iop_Or'):
+                        result = a.exprs[0].ast | a.exprs[1].ast
+                    elif a.op.startswith('Iop_And'):
+                        result = a.exprs[0].ast & a.exprs[1].ast
+                    elif a.op.startswith('Iop_Div'):
+                        result = a.exprs[0].ast / a.exprs[1].ast
+                    elif a.op.startswith('Iop_Mod'):
+                        result = a.exprs[0].ast % a.exprs[1].ast
+
+                    if result is not None and not result.multivalued:
+                        constants.add(state.se.eval(result))
+
 
                 # add successors to the queue to analyze
                 if not succ.se.symbolic(succ.ip):
