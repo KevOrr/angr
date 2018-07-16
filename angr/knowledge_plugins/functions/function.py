@@ -7,7 +7,9 @@ import itertools
 from collections import defaultdict
 
 import claripy
+from ... import engines
 from ...errors import SimEngineError, SimMemoryError
+from ...state_plugins.sim_action import SimActionOperation
 from ...procedures import SIM_LIBRARIES
 
 l = logging.getLogger("angr.knowledge.function")
@@ -350,37 +352,29 @@ class Function(object):
             # get runtime values from logs of successors
             successors = self._project.factory.successors(state)
             for succ in successors.flat_successors + successors.unsat_successors:
+                succ.options.add(o.SYMBOLIC)
+                succ.se.reload_solver()
                 for a in succ.history.recent_actions:
                     for ao in a.all_objects:
                         if not isinstance(ao.ast, claripy.ast.Base):
                             constants.add(ao.ast)
-                        elif not ao.ast.symbolic:
+                        elif ao.ast.singlevalued:
                             constants.add(succ.se.eval(ao.ast))
 
-                    # If this operation has constant result, collect it
-                    # see analyses/ddg.py:_process_operation()
-                    result = None
-                    if a.op.startswith('Iop_Not'):
-                        result = ~a.exprs[0].ast
-                    if a.op.startswith('Iop_Add'):
-                        result = a.exprs[0].ast + a.exprs[1].ast
-                    elif a.op.startswith('Iop_Sub'):
-                        result = a.exprs[0].ast - a.exprs[1].ast
-                    elif a.op.startswith('Iop_Mul'):
-                        result = a.exprs[0].ast * a.exprs[1].ast
-                    elif a.op.startswith('Iop_Xor'):
-                        result = a.exprs[0].ast ^ a.exprs[1].ast
-                    elif a.op.startswith('Iop_Or'):
-                        result = a.exprs[0].ast | a.exprs[1].ast
-                    elif a.op.startswith('Iop_And'):
-                        result = a.exprs[0].ast & a.exprs[1].ast
-                    elif a.op.startswith('Iop_Div'):
-                        result = a.exprs[0].ast / a.exprs[1].ast
-                    elif a.op.startswith('Iop_Mod'):
-                        result = a.exprs[0].ast % a.exprs[1].ast
-
-                    if result is not None and not result.multivalued:
-                        constants.add(state.se.eval(result))
+                    print '1: {}'.format(succ.se.satisfiable())
+                    # If this operation has constant result, collect it as well
+                    if isinstance(a, SimActionOperation):
+                        result = engines.vex.irop.translate(succ, a.op, [e.ast for e in a.exprs])
+                        print '2: {}'.format(succ.se.satisfiable())
+                        if not isinstance(result, claripy.ast.Base):
+                            constants.add(result)
+                        elif result.singlevalued:
+                            print result
+                            try:
+                                constants.add(succ.se.eval(result))
+                                print 'GOOD'
+                            except SimSolverError:
+                                import pdb; pdb.set_trace()
 
 
                 # add successors to the queue to analyze
@@ -1100,4 +1094,5 @@ class Function(object):
 
 
 from ...codenode import BlockNode, HookNode
-from ...errors import AngrValueError
+from ...errors import AngrValueError, SimSolverError
+from ... import sim_options as o
