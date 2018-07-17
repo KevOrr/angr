@@ -5,6 +5,7 @@ import networkx
 import string
 import itertools
 from collections import defaultdict
+import re
 
 import claripy
 from ...errors import SimEngineError, SimMemoryError
@@ -378,6 +379,24 @@ class Function(object):
                         result = a.exprs[0].ast / a.exprs[1].ast
                     elif a.op.startswith('Iop_Mod'):
                         result = a.exprs[0].ast % a.exprs[1].ast
+                    elif a.op.startswith('Iop_Shl'):
+                        result = a.exprs[0].ast << a.exprs[1].ast
+                    elif a.op.startswith('Iop_Shr'):
+                        result = a.exprs[0].ast.LShR(a.exprs[1].ast)
+                    elif a.op.startswith('Iop_Sar'):
+                        result = a.exprs[0].ast >> a.exprs[1].ast
+                    elif a.op.startswith('Iop_CmpEQ'):
+                        result = a.exprs[0].ast == a.exprs[1].ast
+                    elif a.op.startswith('Iop_CmpNE'):
+                        result = a.exprs[0].ast != a.exprs[1].ast
+                    elif re.match(a.op, r'Iop_CmpLT\d*S'):
+                        result = a.exprs[0].ast.SLT(a.exprs[1].ast)
+                    elif re.match(a.op, r'Iop_CmpLE\d*S'):
+                        result = a.exprs[0].ast.SLE(a.exprs[1].ast)
+                    elif re.match(a.op, r'Iop_CmpGT\d*S'):
+                        result = a.exprs[0].ast.SGT(a.exprs[1].ast)
+                    elif re.match(a.op, r'Iop_CmpGE\d*S'):
+                        result = a.exprs[0].ast.SGE(a.exprs[1].ast)
 
                     if result is not None and not result.multivalued:
                         constants.add(state.se.eval(result))
