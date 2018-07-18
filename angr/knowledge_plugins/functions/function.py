@@ -385,18 +385,26 @@ class Function(object):
                         result = a.exprs[0].ast.LShR(a.exprs[1].ast)
                     elif a.op.startswith('Iop_Sar'):
                         result = a.exprs[0].ast >> a.exprs[1].ast
-                    elif a.op.startswith('Iop_CmpEQ'):
-                        result = a.exprs[0].ast == a.exprs[1].ast
-                    elif a.op.startswith('Iop_CmpNE'):
-                        result = a.exprs[0].ast != a.exprs[1].ast
-                    elif re.match(a.op, r'Iop_CmpLT\d*S'):
-                        result = a.exprs[0].ast.SLT(a.exprs[1].ast)
-                    elif re.match(a.op, r'Iop_CmpLE\d*S'):
-                        result = a.exprs[0].ast.SLE(a.exprs[1].ast)
-                    elif re.match(a.op, r'Iop_CmpGT\d*S'):
-                        result = a.exprs[0].ast.SGT(a.exprs[1].ast)
-                    elif re.match(a.op, r'Iop_CmpGE\d*S'):
-                        result = a.exprs[0].ast.SGE(a.exprs[1].ast)
+                    # elif a.op.startswith('Iop_CmpEQ'):
+                    #     result = a.exprs[0].ast == a.exprs[1].ast
+                    # elif a.op.startswith('Iop_CmpNE'):
+                    #     result = a.exprs[0].ast != a.exprs[1].ast
+                    # elif re.match(a.op, r'Iop_CmpLT\d*S'):
+                    #     result = a.exprs[0].ast.SLT(a.exprs[1].ast)
+                    # elif re.match(a.op, r'Iop_CmpLE\d*S'):
+                    #     result = a.exprs[0].ast.SLE(a.exprs[1].ast)
+                    # elif re.match(a.op, r'Iop_CmpGT\d*S'):
+                    #     result = a.exprs[0].ast.SGT(a.exprs[1].ast)
+                    # elif re.match(a.op, r'Iop_CmpGE\d*S'):
+                    #     result = a.exprs[0].ast.SGE(a.exprs[1].ast)
+                    # elif re.match(a.op, r'Iop_CmpLT\d*U'):
+                    #     result = a.exprs[0].ast.ULT(a.exprs[1].ast)
+                    # elif re.match(a.op, r'Iop_CmpLE\d*U'):
+                    #     result = a.exprs[0].ast.ULE(a.exprs[1].ast)
+                    # elif re.match(a.op, r'Iop_CmpGT\d*U'):
+                    #     result = a.exprs[0].ast.UGT(a.exprs[1].ast)
+                    # elif re.match(a.op, r'Iop_CmpGE\d*U'):
+                    #     result = a.exprs[0].ast.UGE(a.exprs[1].ast)
 
                     if result is not None and not result.multivalued:
                         constants.add(state.se.eval(result))
